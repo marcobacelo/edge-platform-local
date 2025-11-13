@@ -1,62 +1,145 @@
-# Edge Platform (Local) — SQS + DynamoDB Local
+# Edge Platform (Local) — Architecture with LocalStack (branch `localstack`)
 
-Local pipeline following the flow **Number Generator → Meta Data (Enricher) → Database Client (Persister) → Database**.
+This repository implements a **100% local pipeline** based on **SQS + DynamoDB** using **LocalStack**.  
+The end-to-end flow is:
 
-## Requirements
-- Docker and Docker Compose
-- AWS CLI (optional, for inspection)
-- `awslocal` (automatically installed in the LocalStack container; optional on the host)
+**Generator → Enricher → Persister → DynamoDB → API (NestJS)**
 
-## Bring up the stack
-```bash
-docker compose up -d localstack
-# Wait ~5-10s for the bootstrap to create the queues in LocalStack
-docker compose up --build -d enricher persister api
-# Generate a batch of messages whenever you want
-docker compose run --rm generator
+Everything runs through **Docker Compose**, with **no AWS account required**.
+
+---
+
+## ▶️ Test Guide
+
+For the complete step‑by‑step guide (AWS CLI configuration, running the stack, generating data, and testing the REST API), see:
+
+👉 **[docs/TEST-GUIDE-localstack.EN.md](docs/TEST-GUIDE-localstack.EN.md)**
+
+---
+
+## Overview of the Architecture
+
+### Components
+
+- **LocalStack (`localstack`)**
+
+  - Emulates **SQS** and **DynamoDB** on port `4566`.
+  - Executes `infra/bootstrap.sh` once ready.
+  - Uses fake credentials (`test` / `test`) and region `eu-west-1`.
+
+- **Generator (`apps/generator`)**
+
+  - Node.js service that generates random numbers (large numeric strings).
+  - Generates a ULID and publishes messages to `numbers.fifo`.
+  - Example:
+    ```json
+    {
+      "id": "01J...",
+      "raw": "31999999999"
+    }
+    ```
+
+- **Enricher (`apps/enricher`)**
+
+  - Consumes `numbers.fifo` and enriches each message.
+  - Computes:
+    - `country`
+    - `isNlMobile`
+    - `e164`
+  - Example:
+    ```json
+    {
+      "id": "01J...",
+      "raw": "31612345678",
+      "country": "NL",
+      "isNlMobile": true,
+      "e164": "+31612345678"
+    }
+    ```
+
+- **Persister (`apps/persister`)**
+
+  - Persists enriched messages into DynamoDB (`PhoneNumbers`).
+  - Adds `createdAt` timestamp.
+  - DynamoDB schema:
+    - `id`, `raw`, `e164`, `country`, `isNlMobile`, `createdAt`
+
+- **API (`apps/api`)**
+  - NestJS HTTP API.
+  - Endpoints:
+    - `GET /numbers`
+    - `GET /numbers/:country` (uses `CountryIndex` GSI)
+
+---
+
+## Local Infrastructure (LocalStack + Bootstrap)
+
+LocalStack automatically runs `infra/bootstrap.sh` on startup to:
+
+1. Create queues:
+   - `numbers.fifo`
+   - `enriched.fifo`
+2. Create DynamoDB table `PhoneNumbers`
+3. Create GSI `CountryIndex`
+
+Targeting endpoint:
+
+```
+http://localhost:4566
 ```
 
-## Check the processing
-1. Confirm that the messages went through: the `enricher` and `persister` logs should show processing.
-2. Check the DynamoDB Local table:
-```bash
-aws dynamodb scan --table-name PhoneNumbers --endpoint-url http://localhost:4566 --query "Count"
-aws dynamodb scan --table-name PhoneNumbers --endpoint-url http://localhost:4566 --max-items 5
+---
+
+## Docker Compose
+
+Services:
+
+- `localstack` (SQS + DynamoDB)
+- `api`
+- `generator`
+- `enricher`
+- `persister`
+
+All share:
+
+- `AWS_REGION=eu-west-1`
+- `AWS_ACCESS_KEY_ID=test`
+- `AWS_SECRET_ACCESS_KEY=test`
+
+---
+
+## End-to-End Data Flow
+
+1. Generator publishes messages
+2. Enricher enriches and routes to second queue
+3. Persister writes to DynamoDB
+4. API exposes the data over HTTP
+
+---
+
+## Directory Structure
+
+```
+/
+  README.md
+  docker-compose.yml
+  docs/
+    TEST-GUIDE-localstack.EN.md
+  infra/
+    bootstrap.sh
+  apps/
+    generator/
+    enricher/
+    persister/
+    api/
 ```
 
-> Tip: run the generator multiple times to populate more data.
+---
 
-## Test the local API
-After starting the api container, test the endpoints:
-```bash
-curl http://localhost:3000/numbers | jq
-curl http://localhost:3000/numbers/NL | jq
-```
+## Branch `localstack`
 
-## Clean everything up
-```bash
-docker compose down -v
-```
+This branch provides a fully local AWS-emulated environment for offline development.
 
-## How does this map to the diagram in the statement?
-- **1. Number Generator** → `generator` service (produces messages to `numbers.fifo`)
-- **2. Meta Data** → `enricher` service (reads `numbers.fifo`, enriches and publishes to `enriched.fifo`)
-- **3. Database Client** → `persister` service (consumes `enriched.fifo` and writes to the table)
-- **Database** → **DynamoDB Local**
+For the full test procedure, see:
 
-The design is equivalent to the provided diagram: linear flow in 3 services and a database.
-
-## Relevant environment variables (docker-compose)
-- `NUMBERS_QUEUE_URL`, `ENRICHED_QUEUE_URL`, `SQS_ENDPOINT` → point to LocalStack
-- `DDB_ENDPOINT` → points to DynamoDB Local
-- `AWS_REGION` → `eu-west-1` (any value works locally)
-- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` → fake local credentials (test / test)
-
-## Notes
-- The queues are **FIFO** with content-based deduplication.
-- Messages have `id` (ULID) and `raw` (number).
-- The `enricher` adds `country`, `isNlMobile`, and `e164`.
-- The `persister` writes the data with a `createdAt` field in ISO8601 format.
-- The bootstrap (`infra/bootstrap.sh`) automatically creates the queues and the PhoneNumbers table, as well as the global secondary index CountryIndex (country + createdAt) for queries by country and date.
-- The environment is 100% local, requiring no real AWS account.
-- The Nest.js API provides a simple REST layer for viewing and testing the processed data.
+👉 **[TEST GUIDE](docs/TEST-GUIDE-localstack.md)**
