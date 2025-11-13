@@ -13,7 +13,7 @@ Everything runs through **Docker Compose**, with **no AWS account required**.
 
 For the complete step‑by‑step guide (AWS CLI configuration, running the stack, generating data, and testing the REST API), see:
 
-👉 **[docs/TEST-GUIDE-localstack.EN.md](docs/TEST-GUIDE-localstack.EN.md)**
+👉 **[TEST GUIDE](docs/TEST-GUIDE-localstack.md)**
 
 ---
 
