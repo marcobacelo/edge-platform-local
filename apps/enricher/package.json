@@ -1,0 +1,11 @@
+{
+  "name": "edge-enricher",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-sqs": "^3.637.0",
+    "libphonenumber-js": "^1.11.7",
+    "ulid": "^2.3.0"
+  }
+}
