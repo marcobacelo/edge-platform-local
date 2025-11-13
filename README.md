@@ -3,12 +3,6 @@
 This document provides a complete architectural overview of the **Edge Platform**, highlighting its components, interactions, decisions, and design principles.  
 It does *not* include deployment, operational, or testing instructions.
 
-## 📐 High-Level Architecture Diagram
-
-The full diagram (with official AWS icons) is available in:
-
-👉 **docs/edge-platform-architecture.drawio**
-
 ## 🧩 Architecture Components
 
 ### 1. Edge API (ECS Fargate)
