@@ -58,11 +58,6 @@ No EC2 instances required.
 ### Observability
 CloudWatch Logs for API, Enricher, Persister.
 
-## 📎 Architecture Diagram
-Open the file:
-
-👉 **docs/edge-platform-architecture.drawio**
-
 ## 📎 Guide to test
 Open the file:
 
