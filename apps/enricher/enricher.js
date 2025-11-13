@@ -5,7 +5,6 @@ import {
   SendMessageCommand,
   DeleteMessageCommand,
 } from "@aws-sdk/client-sqs";
-import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { ulid } from "ulid";
 
 const REGION = process.env.AWS_REGION || "eu-west-1";
@@ -20,36 +19,42 @@ const sqs = new SQSClient({
 });
 
 // -------------------------------
-// Helper para extrair o número
+// Normalize + Enrich
 // -------------------------------
-function extractMsisdn(item) {
-  return (
-    item.msisdn ??
-    item.raw ??
-    item.phone ??
-    item.number ??
-    item.value ??
-    undefined
-  );
-}
+function enrich(item) {
+  const input =
+    item.raw ||
+    item.msisdn ||
+    item.number ||
+    item.phone ||
+    item.value ||
+    undefined;
 
-// -------------------------------
-// Normalização do telefone
-// -------------------------------
-function normalizePhone(input) {
-  const raw = String(input).replace(/\D/g, "");
-  const phone = parsePhoneNumberFromString(raw, "BR");
-
-  if (!phone || !phone.isValid()) {
-    throw new Error(`Invalid phone: ${input}`);
+  if (!input) {
+    throw new Error("Message is missing a phone number field");
   }
 
+  // Extract only digits
+  const raw = String(input).replace(/\D/g, "");
+
+  // COUNTRY RULE (assignment spec)
+  const country = raw.startsWith("31") ? "NL" : "UNKNOWN";
+
+  // NL MOBILE RULE (assignment spec)
+  const isNlMobile = raw.startsWith("316");
+
   return {
-    e164: phone.number,
-    country: phone.country,
+    id: ulid(),
+    raw,
+    country,
+    isNlMobile,
+    createdAt: new Date().toISOString(),
   };
 }
 
+// -------------------------------
+// Queue URL Getter
+// -------------------------------
 async function qurl(name) {
   const { QueueUrl } = await sqs.send(
     new GetQueueUrlCommand({ QueueName: name })
@@ -58,34 +63,13 @@ async function qurl(name) {
 }
 
 // -------------------------------
-// Enriquecimento de um item
-// -------------------------------
-async function enrich(item) {
-  const msisdnInput = extractMsisdn(item);
-
-  if (!msisdnInput) {
-    throw new Error("Message missing msisdn/raw/phone/number");
-  }
-
-  const { e164, country } = normalizePhone(msisdnInput);
-
-  const id = ulid();
-
-  return {
-    id,
-    originalMsisdn: msisdnInput,
-    msisdn: e164,
-    country,
-    createdAt: new Date().toISOString(),
-  };
-}
-
-// -------------------------------
-// Worker loop
+// Worker Loop
 // -------------------------------
 async function work() {
   const inUrl = await qurl(NUMBERS_QUEUE_NAME);
   const outUrl = await qurl(ENRICHED_QUEUE_NAME);
+
+  console.log("[enricher] listening...");
 
   while (true) {
     const resp = await sqs.send(
@@ -99,10 +83,10 @@ async function work() {
     const msgs = resp.Messages || [];
     if (msgs.length === 0) continue;
 
-    for (const m of msgs) {
+    for (const msg of msgs) {
       try {
-        const body = JSON.parse(m.Body);
-        const enriched = await enrich(body);
+        const body = JSON.parse(msg.Body);
+        const enriched = enrich(body);
 
         await sqs.send(
           new SendMessageCommand({
@@ -115,13 +99,13 @@ async function work() {
         await sqs.send(
           new DeleteMessageCommand({
             QueueUrl: inUrl,
-            ReceiptHandle: m.ReceiptHandle,
+            ReceiptHandle: msg.ReceiptHandle,
           })
         );
 
-        console.log("[enricher] ok:", enriched.id);
-      } catch (e) {
-        console.error("[enricher] error processing message:", e, m.Body);
+        console.log("[enricher] ok:", enriched.id, enriched);
+      } catch (err) {
+        console.error("[enricher] error:", err.message, "msg=", msg.Body);
       }
     }
   }
