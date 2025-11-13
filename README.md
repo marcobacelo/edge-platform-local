@@ -61,4 +61,4 @@ CloudWatch Logs for API, Enricher, Persister.
 ## 📎 Guide to test
 Open the file:
 
-👉 **docs/DEPLOYMENT_GUIDE.md**
+👉 **[DEPLOYMENT GUIDE](docs/DEPLOYMENT_GUIDE.md)**
