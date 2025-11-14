@@ -350,28 +350,7 @@ The API queries the `CountryIndex` GSI where `country = :country`.
 
 ---
 
-## 10. Optional: Run the Local Sandbox
-
-If you want to experiment without touching AWS resources, use the Docker‑based
-local stack that relies on LocalStack and a local DynamoDB instance.
-
-From the repository root:
-
-```bash
-docker compose up -d localstack dynamodb
-# wait a few seconds
-
-docker compose up --build -d enricher persister api
-
-# Generate traffic
-docker compose run --rm generator
-```
-
-The local setup mirrors the AWS flow but everything runs on your machine.
-
----
-
-## 11. Destroy All Resources (Cleanup)
+## 10. Destroy All Resources (Cleanup)
 
 When you’re done, destroy the stack to avoid charges.
 
@@ -437,6 +416,3 @@ You now have a complete reference for:
 4. Sending messages through SQS and following them through the pipeline.
 5. Reading data both via DynamoDB and the Edge API.
 6. Cleaning everything up safely.
-
-For conceptual details and future extensions, see `README.md` and the
-architecture diagram in `docs/edge-platform-architecture.drawio`.
